@@ -38,6 +38,7 @@
 #include <hiredis/async.h>
 #include <hiredis/adapters/libevent.h>
 #include <event2/thread.h>
+#include <unistd.h> // for sleep function
 
 #include "rsyslog.h"
 #include "conf.h"
@@ -68,6 +69,8 @@ DEF_IMOD_STATIC_DATA
 #define IMHIREDIS_MODE_QUEUE 1
 #define IMHIREDIS_MODE_SUBSCRIBE 2
 #define IMHIREDIS_MODE_STREAM 3
+#define MAX_RECONNECT_ATTEMPTS 60 // Maximum attempts to reconnect
+#define RECONNECT_INTERVAL 1     // Interval between attempts in second
 DEFobjCurrIf(prop)
 DEFobjCurrIf(ruleset)
 DEFobjCurrIf(glbl)
@@ -2012,12 +2015,92 @@ rsRetVal redisStreamRead(instanceConf_t *inst) {
 							inst->key);
 			}
 		}
+		/*
 		if(reply == NULL) {
 			LogError(0, RS_RET_REDIS_ERROR, "redisStreamRead: Error while trying to read stream '%s'",
 							inst->key);
 			ABORT_FINALIZE(RS_RET_REDIS_ERROR);
 		}
+                */
+		// >> HANDLE RECONNECT
+               if(reply == NULL) {
+    LogError(0, RS_RET_REDIS_ERROR, "redisStreamRead: Error while trying to read stream '%s'", inst->key);
 
+    // Close existing connection if necessary
+    if(inst->conn != NULL) {
+        redisFree(inst->conn);
+        inst->conn = NULL;
+    }
+
+    // Check if currentNode is valid
+    if(inst->currentNode == NULL) {
+        LogError(0, RS_RET_REDIS_ERROR, "redisStreamRead: currentNode is NULL. Cannot reconnect.");
+        ABORT_FINALIZE(RS_RET_REDIS_ERROR);
+    }
+
+    // Attempt to reconnect
+    int attempt = 0;
+    while(attempt < MAX_RECONNECT_ATTEMPTS) {
+        if(inst->currentNode->usesSocket) {
+            // Connect using Unix socket
+            LogMsg(0, 0, LOG_NOTICE, "redisStreamRead: Attempting to reconnect to Redis via socket '%s' (Attempt %d)",
+                   inst->currentNode->socketPath, attempt + 1);
+
+            inst->conn = redisConnectUnix((char *)inst->currentNode->socketPath);
+        } else {
+            // Connect using TCP
+            LogMsg(0, 0, LOG_NOTICE, "redisStreamRead: Attempting to reconnect to Redis at %s:%d (Attempt %d)",
+                   inst->currentNode->server, inst->currentNode->port, attempt + 1);
+
+            inst->conn = redisConnect((char *)inst->currentNode->server, inst->currentNode->port);
+        }
+
+        if(inst->conn != NULL && inst->conn->err == 0) {
+            LogMsg(0, 0, LOG_NOTICE, "redisStreamRead: Successfully reconnected to Redis on attempt %d", attempt + 1);
+
+            // Reinitialize stream parameters or authentication if necessary
+            if(inst->password != NULL) {
+                redisReply *authReply = redisCommand(inst->conn, "AUTH %s", inst->password);
+                if(authReply == NULL || inst->conn->err) {
+                    LogError(0, RS_RET_REDIS_ERROR, "redisStreamRead: AUTH failed - %s", inst->conn->errstr);
+                    if(authReply) freeReplyObject(authReply);
+                    redisFree(inst->conn);
+                    inst->conn = NULL;
+                    continue; // Retry connection
+                }
+                freeReplyObject(authReply);
+            }
+
+            // Additional reinitialization code if needed
+            // ...
+
+            break; // Exit the reconnection loop
+        } else {
+            // Log the error and clean up
+            if(inst->conn != NULL) {
+                LogError(0, RS_RET_REDIS_ERROR, "redisStreamRead: Reconnection attempt %d failed - error: %s",
+                         attempt + 1, inst->conn->errstr);
+                redisFree(inst->conn);
+                inst->conn = NULL;
+            } else {
+                LogError(0, RS_RET_REDIS_ERROR,
+                         "redisStreamRead: Reconnection attempt %d failed - could not allocate context",
+                         attempt + 1);
+            }
+        }
+
+        attempt++;
+        sleep(RECONNECT_INTERVAL); // Wait before retrying
+    }
+
+    if(inst->conn == NULL) {
+        LogError(0, RS_RET_REDIS_ERROR,
+                 "redisStreamRead: Failed to reconnect to Redis after %d attempts. Aborting.",
+                 MAX_RECONNECT_ATTEMPTS);
+        ABORT_FINALIZE(RS_RET_REDIS_ERROR);
+    }
+} 
+                // << HANDLE RECONNECT
 		replyType = reply->type;
 		switch(replyType) {
 			case REDIS_REPLY_ARRAY:
