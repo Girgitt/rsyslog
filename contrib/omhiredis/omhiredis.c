@@ -243,12 +243,12 @@ static rsRetVal isMaster(wrkrInstanceData_t *pWrkrData) {
 		LogMsg(0, RS_RET_REDIS_ERROR, LOG_ERR, "omhiredis: did not get a proper reply from ROLE command");
 		ABORT_FINALIZE(RS_RET_SUSPENDED);
 	}
-	else {
-		if (strncmp(reply->element[0]->str, "master", 6)) {
-			LogMsg(0, RS_RET_OK, LOG_WARNING, "omhiredis: current connected node is not a master");
-			ABORT_FINALIZE(RS_RET_SUSPENDED);
-		}
-	}
+	//else {
+	//	if (strncmp(reply->element[0]->str, "master", 6)) {
+	//		LogMsg(0, RS_RET_OK, LOG_WARNING, "omhiredis: current connected node is not a master");
+	//		ABORT_FINALIZE(RS_RET_SUSPENDED);
+	//	}
+	//}
 
 finalize_it:
 	free(reply);

@@ -1158,36 +1158,36 @@ rsRetVal redisGetServersList(redisNode *node, uchar *password, redisNode **resul
 	* as each role returns a different number of elements,
 	* but lets keep it as a security...
 	*/
-	if (	reply->elements == 5 &&
-		strncmp(reply->element[0]->str, "slave", 5) == 0) {
-
-		CHKiRet(createRedisNode(result));
-		(*result)->server = (uchar *) strdup((const char *)reply->element[1]->str);
-		(*result)->port = reply->element[2]->integer;
-		(*result)->isMaster = 1;
-	}
-	else if (	reply->elements == 3 &&
-			reply->element[2]->type == REDIS_REPLY_ARRAY &&
-			strncmp(reply->element[0]->str, "master", 6) == 0) {
-
-		// iterate on all replicas given in the reply (if any)
-		for (i = 0; i < reply->element[2]->elements; i++) {
-			replica = reply->element[2]->element[i];
-
-			if (replica->type == REDIS_REPLY_ARRAY && replica->elements == 3) {
+	//if (	reply->elements == 5 &&
+	//	strncmp(reply->element[0]->str, "slave", 5) == 0) {
+	//
+	//	CHKiRet(createRedisNode(result));
+	//	(*result)->server = (uchar *) strdup((const char *)reply->element[1]->str);
+	//	(*result)->port = reply->element[2]->integer;
+	//	(*result)->isMaster = 1;
+	//}
+	//else if (	reply->elements == 3 &&
+	//		reply->element[2]->type == REDIS_REPLY_ARRAY &&
+	//		strncmp(reply->element[0]->str, "master", 6) == 0) {
+	//
+	//	// iterate on all replicas given in the reply (if any)
+	//	for (i = 0; i < reply->element[2]->elements; i++) {
+	//		replica = reply->element[2]->element[i];
+	//
+	//		if (replica->type == REDIS_REPLY_ARRAY && replica->elements == 3) {
 				/* node will be a new node every time
 				* with old ones shifted in the list
 				*/
-				CHKiRet(createRedisNode(result));
-				(*result)->server = (uchar *) strdup((const char *)replica->element[0]->str);
-				// yes, the value in that case is a string and NOT an integer!
-				(*result)->port = atoi(replica->element[1]->str);
-			}
-		}
-	} else {
-		// we have a sentinel, or a problem
-		ABORT_FINALIZE(RS_RET_NOT_FOUND);
-	}
+	//			CHKiRet(createRedisNode(result));
+	//			(*result)->server = (uchar *) strdup((const char *)replica->element[0]->str);
+	//			// yes, the value in that case is a string and NOT an integer!
+	//			(*result)->port = atoi(replica->element[1]->str);
+	//		}
+	//	}
+	//} else {
+	//	// we have a sentinel, or a problem
+	//	ABORT_FINALIZE(RS_RET_NOT_FOUND);
+	//}
 
 finalize_it:
 	if (reply != NULL)
